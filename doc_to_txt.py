@@ -31,6 +31,7 @@ except ImportError:
 
 FILENAME_TEMPLATE = "14-004-{number:04d}{suffix}.doc"
 SUFFIXES = ["a", "b"]
+FILTER_ONLY_INDENTED = True
 
 
 def run_command(command: list[str]) -> tuple[bool, str, str]:
@@ -46,12 +47,24 @@ def run_command(command: list[str]) -> tuple[bool, str, str]:
         return False, "", f"Command not found: {command[0]}"
 
 
+def normalize_extracted_text(text: str) -> str:
+    lines = text.splitlines()
+    filtered = [line.rstrip() for line in lines if line.startswith((" ", "\t"))]
+    return "\n".join(filtered) + ("\n" if filtered else "")
+
+
+def write_text_with_filter(dst: Path, text: str) -> None:
+    if FILTER_ONLY_INDENTED:
+        text = normalize_extracted_text(text)
+    dst.write_text(text, encoding="utf-8", errors="ignore")
+
+
 def convert_with_antiword(src: Path, dst: Path) -> bool:
     ok, out, err = run_command(["antiword", str(src)])
     if not ok:
         print(f"antiword failed: {err.strip()}")
         return False
-    dst.write_text(out, encoding="utf-8", errors="ignore")
+    write_text_with_filter(dst, out)
     return True
 
 
@@ -60,6 +73,11 @@ def convert_with_wvtext(src: Path, dst: Path) -> bool:
     if not ok:
         print(f"wvText failed: {err.strip()}")
         return False
+    try:
+        text = dst.read_text(encoding="utf-8", errors="ignore")
+        write_text_with_filter(dst, text)
+    except Exception:
+        pass
     return True
 
 
@@ -84,7 +102,11 @@ def convert_with_libreoffice(src: Path, dst: Path) -> bool:
     if not generated.exists():
         print(f"LibreOffice did not create expected file: {generated}")
         return False
-    generated.replace(dst)
+    try:
+        text = generated.read_text(encoding="utf-8", errors="ignore")
+        write_text_with_filter(dst, text)
+    finally:
+        generated.unlink(missing_ok=True)
     return True
 
 
@@ -102,7 +124,7 @@ def convert_with_textract(src: Path, dst: Path) -> bool:
         text = raw.decode("utf-8", errors="ignore")
     else:
         text = str(raw)
-    dst.write_text(text, encoding="utf-8", errors="ignore")
+    write_text_with_filter(dst, text)
     return True
 
 
@@ -121,7 +143,7 @@ def _normalize_win32com_text_file(src: Path, dst: Path) -> bool:
                 continue
         else:
             text = data.decode("utf-8", errors="replace")
-    dst.write_text(text, encoding="utf-8", errors="replace")
+    write_text_with_filter(dst, text)
     return True
 
 
@@ -316,6 +338,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--method", "-m", choices=list(available_methods().keys()), help="Conversion method to use")
     parser.add_argument("--skip-existing", action="store_true", help="Skip files that already exist locally")
     parser.add_argument("--force", "-f", action="store_true", help="Overwrite existing output files")
+    parser.add_argument("--no-filter", action="store_true", help="Do not filter output to indented lines only")
     return parser.parse_args()
 
 
@@ -329,12 +352,18 @@ def main() -> int:
             print("Error: invalid range. Ensure 1 <= start <= end.")
             return 1
 
+    global FILTER_ONLY_INDENTED
+    FILTER_ONLY_INDENTED = not args.no_filter
+
     method = args.method or choose_method()
     if method is None:
         print("No conversion method is available. Install antiword, wvText, LibreOffice, textract, or use pywin32+Word on Windows.")
         return 1
 
-    print(f"Using conversion method: {method}")
+    if FILTER_ONLY_INDENTED:
+        print(f"Using conversion method: {method} (filtering to indented lines only)")
+    else:
+        print(f"Using conversion method: {method} (no filtering)")
     if args.start is not None and args.end is not None:
         return process_range(args.input, args.output, args.start, args.end, method, args.skip_existing, args.force)
     return process_path(args.input, args.output, args.recursive, method, args.skip_existing, args.force)
