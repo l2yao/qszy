@@ -22,3 +22,5 @@ if [ ! -f "$SRT_FILE" ]; then
 fi
 
 ffmpeg -loop 1 -i shifu3.jpg -i "$MP3_FILE" -vf "subtitles=$SRT_FILE" -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest "$OUTPUT_FILE"
+
+ffmpeg -loop 1 -i images/shifu.jpg -i "mp3/14-004-0002a.mp3" -vf "subtitles=txt/14-004-0002a.srt" -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest "mp4/14-004-0002a.mp4"
