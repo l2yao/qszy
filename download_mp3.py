@@ -38,11 +38,16 @@ def download_file(url: str, dest: Path, timeout: int = 30) -> bool:
     return False
 
 
-def build_urls(start: int, end: int, suffixes: list[str]) -> list[tuple[str, str]]:
+def build_urls(start: int, end: int, use_suffixes: bool) -> list[tuple[str, str]]:
     urls: list[tuple[str, str]] = []
     for index in range(start, end + 1):
-        for suffix in suffixes:
-            filename = FILENAME_TEMPLATE.format(number=index, suffix=suffix)
+        if use_suffixes:
+            for suffix in SUFFIXES:
+                filename = FILENAME_TEMPLATE.format(number=index, suffix=suffix)
+                url = f"{BASE_URL}/{filename}"
+                urls.append((url, filename))
+        else:
+            filename = FILENAME_TEMPLATE.format(number=index, suffix="")
             url = f"{BASE_URL}/{filename}"
             urls.append((url, filename))
     return urls
@@ -66,6 +71,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip files that already exist locally",
     )
+    parser.add_argument(
+        "--no-suffix",
+        action="store_true",
+        help="Download files without a/b suffixes (e.g., 14-004-0010.mp3)",
+    )
     return parser.parse_args()
 
 
@@ -78,7 +88,7 @@ def main() -> int:
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    urls = build_urls(args.start, args.end, SUFFIXES)
+    urls = build_urls(args.start, args.end, not args.no_suffix)
     print(f"Downloading {len(urls)} files to {output_dir}")
 
     success_count = 0

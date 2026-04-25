@@ -248,11 +248,17 @@ def convert_file(src: Path, dst: Path, method: str | None = None) -> bool:
     return False
 
 
-def build_range_paths(start: int, end: int, input_dir: Path, suffixes: list[str]) -> list[tuple[Path, Path]]:
+def build_range_paths(start: int, end: int, input_dir: Path, suffixes: list[str], use_suffixes: bool) -> list[tuple[Path, Path]]:
     paths: list[tuple[Path, Path]] = []
     for index in range(start, end + 1):
-        for suffix in suffixes:
-            filename = FILENAME_TEMPLATE.format(number=index, suffix=suffix)
+        if use_suffixes:
+            for suffix in suffixes:
+                filename = FILENAME_TEMPLATE.format(number=index, suffix=suffix)
+                src = input_dir / filename
+                dst = src.with_suffix(".txt")
+                paths.append((src, dst))
+        else:
+            filename = FILENAME_TEMPLATE.format(number=index, suffix="")
             src = input_dir / filename
             dst = src.with_suffix(".txt")
             paths.append((src, dst))
@@ -299,14 +305,14 @@ def process_path(input_path: Path, output_path: Path, recursive: bool, method: s
     return errors
 
 
-def process_range(input_path: Path, output_path: Path, start: int, end: int, method: str | None, skip_existing: bool, force: bool) -> int:
+def process_range(input_path: Path, output_path: Path, start: int, end: int, method: str | None, skip_existing: bool, force: bool, use_suffixes: bool) -> int:
     if output_path.exists() and not output_path.is_dir():
         print(f"Output path must be a directory when converting a range: {output_path}")
         return 1
 
     output_path.mkdir(parents=True, exist_ok=True)
     errors = 0
-    paths = build_range_paths(start, end, input_path, SUFFIXES)
+    paths = build_range_paths(start, end, input_path, SUFFIXES, use_suffixes)
     for src, dst in paths:
         dst = output_path / dst.name
         if not src.exists():
@@ -339,6 +345,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-existing", action="store_true", help="Skip files that already exist locally")
     parser.add_argument("--force", "-f", action="store_true", help="Overwrite existing output files")
     parser.add_argument("--no-filter", action="store_true", help="Do not filter output to indented lines only")
+    parser.add_argument(
+        "--no-suffix",
+        action="store_true",
+        help="Use files without a/b suffixes (e.g., 14-004-0010.doc)",
+    )
     return parser.parse_args()
 
 
@@ -365,7 +376,7 @@ def main() -> int:
     else:
         print(f"Using conversion method: {method} (no filtering)")
     if args.start is not None and args.end is not None:
-        return process_range(args.input, args.output, args.start, args.end, method, args.skip_existing, args.force)
+        return process_range(args.input, args.output, args.start, args.end, method, args.skip_existing, args.force, not args.no_suffix)
     return process_path(args.input, args.output, args.recursive, method, args.skip_existing, args.force)
 
 
